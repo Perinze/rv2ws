@@ -1,6 +1,14 @@
+.text
+main:
+    li      a0, 0x0001
+    jal     ra, encodeLEB128
+    li      a7, 10
+    ecall
+
 encodeLEB128:
     # x &= 0xfff;
-    andi    t0, a0, 0xfff # t0 x
+    li      t1, 0xfff
+    and     t0, a0, t1 # t0 x
 
     # unsigned upper6 = x >> 6;
     srli    t1, t0, 6   # t1 upper6
@@ -11,14 +19,17 @@ encodeLEB128:
     # if (upper6 == 0b000000) {
     #     high_valid = 0;
     # }
+    bne     t1, zero, upper_all_zero_end
+    li      t2, 0
+upper_all_zero_end:
+
     # if (upper6 == 0b111111) {
     #     high_valid = 0;
     # }
-    bne     t1, zero, high_valid_set_end
     li      t3, 0x3f    # tmp 0x3f
-    bne     t1, t3, high_valid_set_end
+    bne     t1, t3, upper_all_one_end
     li      t2, 0
-high_valid_set_end:
+upper_all_one_end:
 
     # bool sign = x >> 11;
     srli    t3, t0, 11  # t3 sign
