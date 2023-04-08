@@ -175,6 +175,32 @@ size_t translateRType(unsigned char *wasm, const unsigned long long *riscv, unsi
     return (unsigned)(p - wasm);
 }
 
+unsigned char forward_count[2000];
+unsigned char backward_count[2000];
+
+unsigned readTargetCount(unsigned *riscv, unsigned *addr, bool flag) {
+    unsigned char *table = backward_count;
+    if (flag != 0) {
+        table = forward_count;
+    }
+    unsigned offset = (unsigned)((unsigned char*)addr - (unsigned char*)riscv);
+    offset /= 4;
+    return *(table + offset);
+}
+
+void incrTargetCount(unsigned *riscv, unsigned *addr, bool flag) {
+    unsigned char *table = backward_count;
+    if (flag != 0) {
+        table = forward_count;
+    }
+    unsigned offset = (unsigned)((unsigned char*)addr - (unsigned char*)riscv);
+    offset /= 4;
+    unsigned char tmp = *(table + offset);
+    tmp = tmp + 1;
+    *(table + offset) = tmp;
+}
+
+
 struct testcase {
     unsigned long long input;
     unsigned long long output;
@@ -256,10 +282,33 @@ void test_translate_r_type() {
     }
 }
 
+void test_count() {
+    std::cout << "test count\n";
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0200, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 1);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0200, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0300, 1);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0300, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x1300, 0);
+    incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 1);
+
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 0) == 2);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 1) == 2);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0200, 0) == 2);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0200, 1) == 0);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0300, 0) == 1);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x0300, 1) == 1);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x1300, 0) == 1);
+    assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x1300, 1) == 0);
+}
+
 int main() {
     test_encode_leb128();
     test_translate_i_type();
     test_translate_r_type();
+    test_count();
 
     std::cout << "done\n";
     return 0;
