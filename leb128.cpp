@@ -331,6 +331,46 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
     return (unsigned)(p - wasm);
 }
 
+size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
+    unsigned *p = riscv;
+    unsigned instr = *p;
+    while (instr != 0xffffffff) {
+        instr >>= 4;
+        unsigned type = instr & 0b111;
+        instr >>= 5;
+        unsigned op = instr & 0b111;
+        unsigned char opcode;
+
+        unsigned cnt = backward_count[(size_t)(p - riscv)];
+        while (cnt > 0) {
+            *wasm = 0x03;
+            wasm += 1;
+            *wasm = 0x40;
+            wasm += 1;
+        }
+        
+        if (type == 0b001) { // i type
+            opcode = opcodeIType(instr);
+            wasm += translateIType(wasm, (unsigned long long*)p, opcode);
+        } else if (type == 0b011) { // r type
+            opcode = opcodeRType(instr);
+            wasm += translateRType(wasm, (unsigned long long*)p, opcode);
+        } else if (type == 0b110) { // branch
+            opcode = opcodeBranch(instr);
+            wasm += translateBranch(wasm, (unsigned*)p, opcode);
+        }
+
+        unsigned cnt = forward_count[(size_t)(p - riscv)];
+        while (cnt > 0) {
+            *wasm = 0x0b;
+            wasm += 1;
+        }
+
+        p += 1;
+        instr = *p;
+    }
+}
+
 
 struct testcase {
     unsigned long long input;
