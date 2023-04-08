@@ -278,7 +278,10 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
     unsigned char *p = wasm;
 
     if (flag == 1) { // forward
-        *p = 0x02;
+        std::cerr << "forward\n";
+        *p = 0x02; // block
+        p += 1;
+        *p = 0x40; // block
         p += 1;
     }
 
@@ -297,8 +300,10 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
 
     if (tar == 0) {
         // i32.const 0
-        *p = 0x0041; // store halfword
-        p += 2;
+        *p = 0x41; // store halfword
+        p += 1;
+        *p = 0x00;
+        p += 1;
     } else {
         // get_local tmp
         *p = 0x20; // store byte
@@ -313,8 +318,10 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
     p += 1;
 
     // br_if 0
-    *p = 0x000d; // store halfword
-    p += 2;
+    *p = 0x0d; // store halfword
+    p += 1;
+    *p = 0x00; // store halfword
+    p += 1;
 
     if (flag == 0) { // forward
         *p = 0x0b;
@@ -492,6 +499,25 @@ void test_table_2() {
     }
 }
 
+void test_translate_branch() {
+    std::cout << "test translate branch\n";
+    std::vector<testcase> cases {
+        testcase(0xfe655ce3, 0x0b000d4e17200020, 8, 0x4e),
+        testcase(0x00050463, 0x000d46004100204002, 9, 0x46),
+    };
+    for (testcase c : cases) {
+        unsigned long long output;
+        unsigned size = translateBranch((unsigned char*)&output, (unsigned*)&c.input, c.opcode);
+        if (size != c.size) {
+            std::cerr << "size not match\n";
+        }
+        if (output != c.output) {
+            std::cerr << "wasm not match\n";
+            std::cerr << "get 0x" << std::hex << output << std::endl;
+        }
+    }
+}
+
 int main() {
     test_encode_leb128();
     test_translate_i_type();
@@ -499,6 +525,7 @@ int main() {
     test_count();
     test_table_1();
     test_table_2();
+    test_translate_branch();
 
     std::cout << "done\n";
     return 0;
