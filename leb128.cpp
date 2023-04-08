@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include <fmt/format.h>
 
 std::pair<unsigned, unsigned> encodeLEB128(unsigned x) {
 
@@ -76,6 +77,7 @@ unsigned short regMap[] = {
     0x15, // t6 (x31) -> 21 (0x15)
 };
 
+// TODO
 size_t translateIType(unsigned char *wasm, const unsigned long long *riscv, unsigned char opcode) {
     unsigned long long instr = *riscv;
     instr >>= 7;
@@ -200,6 +202,51 @@ void incrTargetCount(unsigned *riscv, unsigned *addr, bool flag) {
     *(table + offset) = tmp;
 }
 
+void generateTargetTable(unsigned *riscv) {
+    //std::cerr << fmt::format("riscv {:#x}\n", (unsigned)riscv);
+    unsigned *p = riscv;
+    unsigned instr = *p;
+    while (instr != 0xffffffff) {
+        unsigned opcode = instr & 0b1111111;
+        if (opcode != 0b1100011) {
+            p += 1;
+            instr = *p;
+            continue;
+        }
+        //std::cerr << fmt::format("instr {:#08x}\n", instr);
+        //std::cerr << fmt::format("opcode {:#07b}\n", opcode);
+        instr >>= 7;
+        int imm = instr & 0b11111; // [4:1|11]
+        //std::cerr << fmt::format("imm[4:1|11] {:#b}\n", imm);
+        unsigned tmp = imm & 1;
+        if (tmp == 1) {
+            imm |= 0b100000000000;
+        }
+        imm &= 0xfffffffe; // [11] [4:0]
+        //std::cerr << fmt::format("imm[11][4:0] {:#b}\n", imm);
+        instr >>= 18;
+        tmp = instr & 0b111111;
+        //std::cerr << fmt::format("tmp {:#b}\n", imm);
+        tmp <<= 5;
+        imm |= tmp; // [11:0]
+        //std::cerr << fmt::format("imm[11:0] {:#b}\n", imm);
+        instr >>= 1;
+        tmp = instr & 1;
+        bool flag = 1; // forward
+        if (tmp == 1) {
+            imm |= 0xfffff000;
+            flag = 0; // backward
+        }
+        //std::cerr << fmt::format("imm[31:0] {:#b}\n", imm);
+        //std::cerr << fmt::format("imm {:d}\n", imm);
+        imm += (unsigned)p;
+        //std::cerr << fmt::format("pc {:#x}\n", (unsigned)imm);
+        incrTargetCount(riscv, (unsigned*)imm, flag);
+        p += 1; // in asm p += 4 since instruction is 4 bytes
+        instr = *p;
+    }
+}
+
 
 struct testcase {
     unsigned long long input;
@@ -284,6 +331,8 @@ void test_translate_r_type() {
 
 void test_count() {
     std::cout << "test count\n";
+    memset(forward_count, 0, sizeof(forward_count));
+    memset(backward_count, 0, sizeof(backward_count));
     incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 0);
     incrTargetCount((unsigned*)0x0000, (unsigned*)0x0100, 0);
     incrTargetCount((unsigned*)0x0000, (unsigned*)0x0200, 0);
@@ -304,11 +353,75 @@ void test_count() {
     assert(readTargetCount((unsigned*)0x0000, (unsigned*)0x1300, 1) == 0);
 }
 
+unsigned short BackwardBranch[] = {
+    0x0293, 0x0060, 0x0533, 0x4055, 
+    0x0313, 0x0010, 0x5ce3, 0xfe65, 
+    0x0463, 0x0005, 0x0513, 0xfff0, 
+    0x0513, 0x0015, 
+    0xffff, 0xffff, 
+};
+
+void test_table_1() {
+    std::cout << "test table 1\n";
+    memset(forward_count, 0, sizeof(forward_count));
+    memset(backward_count, 0, sizeof(backward_count));
+    generateTargetTable((unsigned*)BackwardBranch);
+    std::vector<unsigned> forward_count {
+        0, 0, 0, 0, 0, 0, 1, 
+    };
+    std::vector<unsigned> backward_count {
+        0, 1, 0, 0, 0, 0, 0, 
+    };
+    for (size_t i = 0; i < 7; i++) {
+        unsigned cnt;
+        if ((cnt = readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1)) != forward_count[i]) {
+            std::cerr << "forward[" << i << "] is expected to be " << forward_count[i];
+            std::cerr << ", but " << cnt << " gotten\n";
+        }
+        if ((cnt = readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0)) != backward_count[i]) {
+            std::cerr << "backward[" << i << "] is expected to be " << backward_count[i];
+            std::cerr << ", but " << cnt << " gotten\n";
+        }
+    }
+}
+
+unsigned short BranchToFirstInstruction[] = {
+    0x0513, 0xfff5, 0x0293, 0x0070, 
+    0x5ce3, 0xfe55, 0x0533, 0x4005, 
+    0xffff, 0xffff, 
+};
+
+void test_table_2() {
+    std::cout << "test table 2\n";
+    memset(forward_count, 0, sizeof(forward_count));
+    memset(backward_count, 0, sizeof(backward_count));
+    generateTargetTable((unsigned*)BranchToFirstInstruction);
+    std::vector<unsigned> forward_count {
+        0, 0, 0, 0, 
+    };
+    std::vector<unsigned> backward_count {
+        1, 0, 0, 0, 
+    };
+    for (size_t i = 0; i < 4; i++) {
+        unsigned cnt;
+        if ((cnt = readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1)) != forward_count[i]) {
+            std::cerr << "forward[" << i << "] is expected to be " << forward_count[i];
+            std::cerr << ", but " << cnt << " gotten\n";
+        }
+        if ((cnt = readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0)) != backward_count[i]) {
+            std::cerr << "backward[" << i << "] is expected to be " << backward_count[i];
+            std::cerr << ", but " << cnt << " gotten\n";
+        }
+    }
+}
+
 int main() {
     test_encode_leb128();
     test_translate_i_type();
     test_translate_r_type();
     test_count();
+    test_table_1();
+    test_table_2();
 
     std::cout << "done\n";
     return 0;
