@@ -123,15 +123,71 @@ size_t translateIType(unsigned char *wasm, const unsigned long long *riscv, unsi
     return (unsigned)(p - wasm);
 }
 
+size_t translateRType(unsigned char *wasm, const unsigned long long *riscv, unsigned char opcode) {
+    unsigned long long instr = *riscv;
+    instr >>= 7;
+    unsigned dst = instr & 0b11111;
+    instr >>= 8;
+    unsigned src = instr & 0b11111;
+    instr >>= 5;
+    unsigned tar = instr & 0b11111;
+    
+    unsigned char *p = wasm;
+
+    if (src == 0) {
+        // i32.const 0
+        *p = 0x0041; // store halfword
+        p += 2;
+    } else {
+        // get_local tmp
+        *p = 0x20; // store byte
+        p += 1;
+        unsigned tmp = regMap[src];
+        *p = tmp; // store byte
+        p += 1;
+    }
+
+    if (tar == 0) {
+        // i32.const 0
+        *p = 0x0041; // store halfword
+        p += 2;
+    } else {
+        // get_local tmp
+        *p = 0x20; // store byte
+        p += 1;
+        unsigned tmp = regMap[tar];
+        *p = tmp; // store byte
+        p += 1;
+    }
+
+    // opcode
+    *p = opcode; // store byte
+    p += 1;
+
+    // set_local
+    *p = 0x21; // store byte
+    p += 1;
+
+    unsigned tmp = regMap[dst];
+    *p = tmp; // store byte
+    p += 1;
+
+    return (unsigned)(p - wasm);
+}
+
 struct testcase {
     unsigned long long input;
     unsigned long long output;
     unsigned size;
+    unsigned char opcode;
     testcase(unsigned long long input, unsigned long long output, unsigned size):
         input(input), output(output), size(size) {}
+    testcase(unsigned long long input, unsigned long long output, unsigned size, unsigned char opcode):
+        input(input), output(output), size(size), opcode(opcode) {}
 };
 
 void test_encode_leb128() {
+    std::cout << "test encode leb128\n";
     std::vector<testcase> cases {
         testcase(0x0184, 0x0384, 2),
         testcase(0x0fc0, 0x0040, 1),
@@ -163,14 +219,33 @@ void test_encode_leb128() {
 }
 
 void test_translate_i_type() {
+    std::cout << "test translate i type\n";
     std::vector<testcase> cases {
-        testcase(0x00600293, 0x16216a06410041, 7),
-        testcase(0x00100313, 0x17216a01410041, 7),
-        testcase(0x00150513, 0x00216a01410020, 7),
+        testcase(0x00600293, 0x16216a06410041, 7, 0x6a),
+        testcase(0x00100313, 0x17216a01410041, 7, 0x6a),
+        testcase(0x00150513, 0x00216a01410020, 7, 0x6a),
     };
     for (testcase c : cases) {
         unsigned long long output;
-        unsigned size = translateIType((unsigned char*)&output, &c.input, 0x6a);
+        unsigned size = translateIType((unsigned char*)&output, &c.input, c.opcode);
+        if (size != c.size) {
+            std::cerr << "size not match\n";
+        }
+        if (output != c.output) {
+            std::cerr << "wasm not match\n";
+            std::cerr << "get 0x" << std::hex << output << std::endl;
+        }
+    }
+}
+
+void test_translate_r_type() {
+    std::cout << "test translate r type\n";
+    std::vector<testcase> cases {
+        testcase(0x40550533, 0x00216b16200020, 7, 0x6b),
+    };
+    for (testcase c : cases) {
+        unsigned long long output;
+        unsigned size = translateRType((unsigned char*)&output, &c.input, c.opcode);
         if (size != c.size) {
             std::cerr << "size not match\n";
         }
@@ -184,7 +259,7 @@ void test_translate_i_type() {
 int main() {
     test_encode_leb128();
     test_translate_i_type();
-
+    test_translate_r_type();
 
     std::cout << "done\n";
     return 0;
