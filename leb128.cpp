@@ -278,7 +278,7 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
     unsigned char *p = wasm;
 
     if (flag == 1) { // forward
-        std::cerr << "forward\n";
+        //std::cerr << "forward\n";
         *p = 0x02; // block
         p += 1;
         *p = 0x40; // block
@@ -375,39 +375,54 @@ unsigned char opcode(unsigned instr) {
 }
 
 size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
+    unsigned char* wasm_copy = wasm;
+    generateTargetTable(riscv);
+    for (size_t i = 0; i < 7; i++) {
+        std::cerr << fmt::format("forward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1));
+        std::cerr << fmt::format("backward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0));
+    }
     unsigned *p = riscv;
     unsigned instr = *p;
     while (instr != 0xffffffff) {
         unsigned char opc = opcode(instr);
+        std::cerr << fmt::format("instr[{:d}] = {:#x}\n", (size_t)(p - riscv), instr);
+        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(wasm - wasm_copy));
         instr >>= 4;
         unsigned type = instr & 0b111;
 
         unsigned cnt = backward_count[(size_t)(p - riscv)];
-        while (cnt > 0) {
+        std::cerr << fmt::format("backward[{:d}] = {:d}\n", (size_t)(p - riscv), cnt);
+        while (cnt-- > 0) {
             *wasm = 0x03;
             wasm += 1;
             *wasm = 0x40;
+            wasm += 1;
+        }
+
+        cnt = forward_count[(size_t)(p - riscv)];
+        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(wasm - wasm_copy));
+        std::cerr << fmt::format("forward[{:d}] = {:d}\n", (size_t)(p - riscv), cnt);
+        while (cnt-- > 0) {
+            *wasm = 0x0b;
             wasm += 1;
         }
         
         switch (type) {
             case 0b001: // itype
             wasm += translateIType(wasm, (unsigned long long*)p, opc);
+            break;
             case 0b011: // rtype
             wasm += translateRType(wasm, (unsigned long long*)p, opc);
+            break;
             case 0b110: // branch
             wasm += translateBranch(wasm, (unsigned*)p, opc);
-        }
-
-        unsigned cnt = forward_count[(size_t)(p - riscv)];
-        while (cnt > 0) {
-            *wasm = 0x0b;
-            wasm += 1;
+            break;
         }
 
         p += 1;
         instr = *p;
     }
+    return (size_t)(p - riscv);
 }
 
 
@@ -597,6 +612,61 @@ void test_translate_branch() {
     }
 }
 
+void test_all() {
+    std::cout << "test all\n";
+    std::vector<std::string> tests {
+        "BackwardBranch",
+    };
+    for (auto name : tests) {
+        memset(forward_count, 0, sizeof(forward_count));
+        memset(backward_count, 0, sizeof(backward_count));
+
+        FILE *fbin = fopen(fmt::format("test/{:s}.bin", name).c_str(), "rb");
+        FILE *fans = fopen(fmt::format("test/{:s}.wasm", name).c_str(), "rb");
+
+        fseek(fbin, 0L, SEEK_END);
+        size_t bin_size = ftell(fbin);
+        rewind(fbin);
+
+        fseek(fans, 0L, SEEK_END);
+        size_t ans_size = ftell(fans);
+        rewind(fans);
+
+        unsigned *bin_buf = (unsigned*)malloc(bin_size + 4);
+        bin_buf[bin_size / 4] = 0xffffffff;
+        fread(bin_buf, bin_size, 1, fbin);
+        for (size_t i = 0; i < bin_size / 4 + 1; i++) {
+            std::cerr << fmt::format("{:#08x}\n", bin_buf[i]);
+        }
+        unsigned char *ans_buf = (unsigned char*)malloc(ans_size);
+        fread(ans_buf, ans_size, 1, fans);
+
+        unsigned char *out_buf = (unsigned char*)calloc(1, ans_size + 64);
+        RISCVtoWASM(bin_buf, out_buf);
+
+        bool match = true;
+        for (size_t i = 0; i < ans_size; i++) {
+            if (out_buf[i] != ans_buf[i]) {
+                match = false;
+            }
+        }
+        if (!match) {
+            std::string log_file = fmt::format("test/{:s}.out", name);
+            FILE *fout = fopen(log_file.c_str(), "wb");
+            fwrite(out_buf, ans_size, 1, fout);
+            fclose(fout);
+            std::cerr << fmt::format("not match\noutput saved to {:s}\n", log_file);
+        }
+
+        free(bin_buf);
+        free(out_buf);
+        free(ans_buf);
+
+        fclose(fbin);
+        fclose(fans);
+    }
+}
+
 int main() {
     test_encode_leb128();
     test_translate_i_type();
@@ -605,6 +675,7 @@ int main() {
     test_table_1();
     test_table_2();
     test_translate_branch();
+    test_all();
 
     std::cout << "done\n";
     return 0;
