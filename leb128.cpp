@@ -382,28 +382,28 @@ size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
     unsigned *riscv_copy = riscv;
     generateTargetTable(riscv);
     for (size_t i = 0; i < 7; i++) {
-        std::cerr << fmt::format("forward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1));
-        std::cerr << fmt::format("backward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0));
+        //std::cerr << fmt::format("forward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1));
+        //std::cerr << fmt::format("backward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0));
     }
     unsigned char *p = wasm;
     unsigned instr = *riscv;
     while (instr != 0xffffffff) {
         unsigned char opc = opcode(instr);
-        std::cerr << fmt::format("instr[{:d}] = {:#x}\n", (size_t)(riscv - riscv_copy), instr);
-        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
+        //std::cerr << fmt::format("instr[{:d}] = {:#x}\n", (size_t)(riscv - riscv_copy), instr);
+        //std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
         instr >>= 4;
         unsigned type = instr & 0b111;
 
         unsigned cnt = forward_count[(size_t)(riscv - riscv_copy)];
-        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
-        std::cerr << fmt::format("forward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
+        //std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
+        //std::cerr << fmt::format("forward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
         while (cnt-- > 0) {
             *p = 0x0b;
             p += 1;
         }
 
         cnt = backward_count[(size_t)(riscv - riscv_copy)];
-        std::cerr << fmt::format("backward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
+        //std::cerr << fmt::format("backward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
         while (cnt-- > 0) {
             *p = 0x03;
             p += 1;
