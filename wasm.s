@@ -8,6 +8,147 @@ forwardCount:
     .zero 2000
 
 RISCVtoWASM:
+# size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
+    # riscv = a0, wasm = a1
+    mv      s4, a0
+    mv      s5, a1
+    # riscv = s4, wasm = s5
+
+    # unsigned *riscv_copy = riscv;
+    mv      s6, a0
+
+    # generateTargetTable(riscv);
+    jal     generateTargetTable
+
+    # unsigned char *p = wasm;
+    mv      a4, s5
+
+    # unsigned instr = *riscv;
+    lw      a3, 0(s4)
+
+    # if (instr == 0xffffffff) goto main_loop_end
+    li      t0, 0xffffffff
+    beq     a3, t0, main_loop_end
+
+main_loop:
+
+    #     unsigned char opc = opcode(instr);
+    # instr = a0 -> opc = a0
+    mv      a0, a3
+    jal     opcode
+    mv      a2, a0
+    # opc = a2
+    
+    #     instr >>= 4;
+    srli    a3, 4
+
+    #     unsigned type = instr & 0b111;
+    and     a5, a3, 0x7
+
+    #     unsigned cnt = forward_count[(size_t)(riscv - riscv_copy)];
+    sub     t0, s4, s6
+    srli    t0, t0, 2
+    lb      t0, forward_count(t0)
+
+    j       loop_forward_check
+loop_forward_begin:
+    #         *p = 0x0b;
+    li      t1, 0x0b
+    sb      t1, 0(a4)
+
+    #         p += 1;
+    addi    a4, a4, 1
+
+    #         cnt--;
+    subi	t0, t0, 1
+    
+loop_forward_check:
+    #     while (cnt > 0) {
+    bgt		t0, zero, loop_forward_begin
+    
+loop_forward_end:
+
+    #     cnt = backward_count[(size_t)(riscv - riscv_copy)];
+    sub     t0, s4, s6
+    srli    t0, t0, 2
+    lb      t0, backward_count(t0)
+
+    j		loop_backward_check
+loop_backward_begin:
+    #         *p = 0x4003;
+    li      t1, 0x4003
+    sh      t1, 0(a4)
+
+    #         p += 2;
+    addi    a0, a4, 2
+    # p is not a0
+
+    #         cnt--;
+    subi    t0, t0, 1
+
+loop_backward_check:
+    #     while (cnt > 0);
+    bgt     t0, zero, loop_backward_begin
+
+    # p = a0, riscv = a1, opc = a2
+    mv      a1, s4
+    # old_p = s9
+    mv      s9, a0
+
+    #     switch (type) { // a5
+    li      t0, 0x1
+    beq     a5, t0, switch_i_type
+    li      t0, 0x3
+    beq     a5, t0, switch_r_type
+    li      t0, 0x6
+    beq     a5, t0, switch_branch
+    j       switch_end
+
+    #         case 0b001: // itype
+switch_i_type:
+
+    #         p += translateIType(p, riscv, opc);
+    jal     translateIType
+    j       switch_end
+
+    #         case 0b011: // rtype
+switch_r_type:
+
+    #         p += translateRType(p, (unsigned long long*)riscv, opc);
+    jal     translateRType
+    j       switch_end
+
+    #         case 0b110: // branch
+switch_branch:
+
+    #         p += translateBranch(p, (unsigned*)riscv, opc);
+    jal     translateBranch
+switch_end:
+
+    add     a0, a0, s9
+
+    #     riscv += 1; // 4 per instr
+    addi    s4, s4, 4
+
+    #     instr = *riscv;
+    lw      a3, 0(s4)
+
+    # while (instr != 0xffffffff);
+    li      t0, 0xffffffff
+    bne     a3, t0, main_loop
+
+main_loop_end:
+
+    # *p = 0x0b0f0020; // get_local
+    li      t0, 0x0b0f0020
+    sw		t0, 0(a0)
+    
+    # p += 4;
+    addi    a0, a0, 4
+
+    # return (size_t)(p - wasm);
+    sub     a0, a0, s5
+    jalr    zero, ra, 0
 
 
 
