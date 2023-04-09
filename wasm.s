@@ -9,11 +9,124 @@ forwardCount:
 
 RISCVtoWASM:
 
+
+
+
+
+
+
+
 translateIType:
+    # unsigned instr = *riscv;
+    # riscv end
+    lw      a2, 0(a1)
+
+    # s7 is wasm
+    mv      s7, a0
+
+    # instr >>= 7;
+    srli    a2, a2, 7
+
+    # unsigned dst = instr & 0b11111;
+    andi    a3, a2, 0x1f
+
+    # instr >>= 8;
+    srli    a2, 8
+
+    # unsigned src = instr & 0b11111;
+    andi    a0, a2, 0x1f
+
+    # instr >>= 5;
+    srli    a2, a2, 5
+
+    # unsigned imm = instr & 0xfff;
+    # instr end
+    andi    a2, a2, 0xfff
+
+    # if (opcode == 0x75) { // i32.shr_s
+    li      t0, 0x75
+    bne     a4, t0, handle_i32_shr_s_end
+
+    #     imm &= 0b11111;
+    andi    a2, a2, 0x1f
+
+    # }
+handle_i32_shr_s_end:
+    
+    ## unsigned char *p = wasm;
+    #mv      p, wasm
+
+    # a0 = src, a1 = wasm
+    # src end
+    mv      a1, s7
+    jal		convertReg
+    # check a2 still store imm
+
+    # p = wasm + a0
+    add     a1, s7, a0
+
+    # *p = 0x41; // store byte
+    li      t0, 0x41
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # auto res = encodeLEB128(imm);
+    # a0 = imm
+    # imm end
+    # now s0 is p
+    mv      s0, a1
+    mv      a0, a2
+    jal     encodeLEB128
+
+    # *p = a0; // store halfword
+    sh      a0, 0(s0)
+
+    # p += a1;
+    # p is not a1
+    addi    a1, s0, a1
+
+    # *p = opcode; // store byte
+    sb      a4, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # *p = 0x21; // store byte
+    li      t0, 0x21
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # unsigned tmp = regMap[dst];
+    lb      t0, regMap(a3)
+
+    # *p = tmp; // store byte
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # return (unsigned)(p - wasm);
+    sub     a0, a1, s7
+    jalr    zero, ra, 0
+
+
+
+
+
+
 
 translateRType:
 
 translateBranch:
+
+
+
+
+
 
 
 
@@ -93,6 +206,11 @@ add_high_to_result_end:
 set_size_to_2_end:
 
     jalr    zero, ra, 0
+
+
+
+
+
 
 
 
@@ -197,6 +315,11 @@ generate_table_return:
 
 
 
+
+
+
+
+
 readTargetCount:
     # unsigned char *table = backward_count;
     la      a5, backward_count
@@ -218,6 +341,11 @@ flag_is_zero:
     add     a5, a5, a1
     lbu     a0, 0(a5)
     jalr    zero, ra, 0
+
+
+
+
+
 
 
 
@@ -248,4 +376,46 @@ flag_is_zero:
     # *(table + offset) = tmp;
     sb      a4, 0(a5)
 
+    jalr    zero, ra, 0
+
+
+
+
+
+
+
+
+convertReg:
+    # a0 = src, a1 = p
+    # return size
+
+    # if (src == 0) {
+    bne     a0, zero, src_is_reg
+
+    #     *p = 0x0041; // store halfword
+    li      t0, 0x0041
+    sh      t0, 0(a1)
+
+    # return 2
+    li      a0, 2
+    jalr    zero, ra, 0
+
+    # } else {
+src_is_reg:
+
+    #     *p = 0x20; // store byte
+    li      t0, 0x20
+    sb      t0, 0(a1)
+
+    #     p += 1;
+    addi    a1, a1, 1
+
+    #     unsigned tmp = regMap[src];
+    lb		t0, regMap(a0)
+
+    #     *p = tmp; // store byte
+    sb      t0, 0(a1)
+
+    #     return 2
+    li      a0, 2
     jalr    zero, ra, 0
