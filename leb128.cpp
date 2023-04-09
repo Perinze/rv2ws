@@ -331,15 +331,56 @@ size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char
     return (unsigned)(p - wasm);
 }
 
+unsigned char opcode(unsigned instr) {
+    unsigned tmp = instr & 0x707f;
+    unsigned flag = instr & 0x40000000;
+    switch (tmp) {
+        case 0x7013: // andi
+        case 0x7033: // and
+        return 0x71; // i32.and
+
+        case 0x6013: // ori
+        case 0x6033: // or
+        return 0x72; // i32.or
+
+        case 0x0013: // addi
+        return 0x6a; // i32.add
+
+        case 0x0033:
+        if (flag == 0) { // add
+            return 0x6a; // i32.add
+        } else { // sub
+            return 0x6b; // i32.sub
+        }
+
+        case 0x5013:
+        if (flag == 1) { // srai
+            return 0x75; // i32.shr_s
+        } else { // srli
+            return 0x76; // i32.shr_u
+        }
+        case 0x1013: // slli
+        return 0x74; // i32.shl
+        case 0x5033: // srl
+        return 0x76; // i32.shr_u
+        case 0x1033:
+        return 0x74; // i32.shl
+        case 0x0063:
+        return 0x46; // i32.eq
+        case 0x5063:
+        return 0x4e; // i32.ge_s
+        default:
+        return 0xff; // invalid
+    }
+}
+
 size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
     unsigned *p = riscv;
     unsigned instr = *p;
     while (instr != 0xffffffff) {
+        unsigned char opc = opcode(instr);
         instr >>= 4;
         unsigned type = instr & 0b111;
-        instr >>= 5;
-        unsigned op = instr & 0b111;
-        unsigned char opcode;
 
         unsigned cnt = backward_count[(size_t)(p - riscv)];
         while (cnt > 0) {
@@ -349,15 +390,13 @@ size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
             wasm += 1;
         }
         
-        if (type == 0b001) { // i type
-            opcode = opcodeIType(instr);
-            wasm += translateIType(wasm, (unsigned long long*)p, opcode);
-        } else if (type == 0b011) { // r type
-            opcode = opcodeRType(instr);
-            wasm += translateRType(wasm, (unsigned long long*)p, opcode);
-        } else if (type == 0b110) { // branch
-            opcode = opcodeBranch(instr);
-            wasm += translateBranch(wasm, (unsigned*)p, opcode);
+        switch (type) {
+            case 0b001: // itype
+            wasm += translateIType(wasm, (unsigned long long*)p, opc);
+            case 0b011: // rtype
+            wasm += translateRType(wasm, (unsigned long long*)p, opc);
+            case 0b110: // branch
+            wasm += translateBranch(wasm, (unsigned*)p, opc);
         }
 
         unsigned cnt = forward_count[(size_t)(p - riscv)];
