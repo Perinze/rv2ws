@@ -98,41 +98,102 @@ set_size_to_2_end:
 
 generateTargetTable:
     # unsigned *p = riscv;
-    mv      a1, a0
+    mv      a3, a0
 
     # unsigned instr = *p;
-    lw      a5, 0(a0)
+    lw      a5, 0(a3)
 
-    # while (instr != 0xffffffff) {
+    # a4 = 0xffffffff;
+    li      a4, -1
+
+    # if (instr == 0xffffffff) return;
+    beq     a5, a4, generate_table_return
+
+    # a7 = 0b1100011
+    li      a7, 0x63
+
+generate_table_loop:
     #     unsigned opcode = instr & 0b1111111;
+    andi    a6, a5, 0x7f
+
     #     if (opcode != 0b1100011) {
     #         p += 1;
     #         instr = *p;
     #         continue;
     #     }
+    bne     a6, a7, incr_instr_ptr
+
     #     instr >>= 7;
+    srli    a5, a5, 7
+
     #     int imm = instr & 0b11111; // [4:1|11]
+    andi    a1, a5, 0x1f
+
     #     unsigned tmp = imm & 1;
+    andi    a7, a1, 1
+
     #     if (tmp == 1) {
     #         imm |= 0b100000000000;
     #     }
+    beq     a7, zero, set_imm_11_done
+    ori     a1, a1, 0x800
+set_imm_11_done:
+
     #     imm &= 0xfffffffe; // [11] [4:0]
+    andi    a1, a1, 0xfffffffe
+
     #     instr >>= 18;
+    srli    a5, a5, 18
+
     #     tmp = instr & 0b111111;
+    andi    a7, a5, 0x3f
+
     #     tmp <<= 5;
+    slli    a7, a7, 5
+
     #     imm |= tmp; // [11:0]
+    or      a1, a1, a7
+
     #     instr >>= 6;
+    srli    a5, a5, 6
+
     #     tmp = instr & 1;
+    andi    a7, a5, 1
+
     #     unsigned char flag = 1; // forward
+    li      a2, 1
+
     #     if (tmp == 1) {
+    beq     a7, zero, generate_table_set_flag
+
     #         imm |= 0xfffff000;
+    ori     a1, a1, 0xfffff000
+
     #         flag = 0; // backward
+    li      a2, 0
+
     #     }
+generate_table_set_flag:
+
     #     imm += (unsigned)p;
+    add     a1, a1, a3
+    
     #     incrTargetCount(riscv, (unsigned*)imm, flag);
+    #     a0 = riscv, a1 = imm, a2 = flag
+    jal		incrTargetCount
+    
+incr_instr_ptr:
     #     p += 1; // in asm p += 4 since instruction is 4 bytes
+    add     a3, a3, 4
+
     #     instr = *p;
-    # }
+    lw		a5, 0(a3)
+
+    # while (instr != 0xffffffff);
+    bne     a5, a4, generate_table_loop
+
+generate_table_return:
+    jalr    zero, ra, 0
 
 
 
