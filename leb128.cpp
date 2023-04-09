@@ -86,6 +86,9 @@ size_t translateIType(unsigned char *wasm, const unsigned long long *riscv, unsi
     unsigned src = instr & 0b11111;
     instr >>= 5;
     unsigned imm = instr & 0xfff;
+    if (opcode == 0x75) { // i32.shr_s
+        imm &= 0b11111;
+    }
     
     unsigned char *p = wasm;
 
@@ -376,61 +379,62 @@ unsigned char opcode(unsigned instr) {
 
 size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
     unsigned char* wasm_copy = wasm;
+    unsigned *riscv_copy = riscv;
     generateTargetTable(riscv);
     for (size_t i = 0; i < 7; i++) {
         std::cerr << fmt::format("forward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 1));
         std::cerr << fmt::format("backward[{:d}] = {:d}\n", i, readTargetCount((unsigned*)0, (unsigned*)(i * 4), 0));
     }
-    unsigned *p = riscv;
-    unsigned instr = *p;
+    unsigned char *p = wasm;
+    unsigned instr = *riscv;
     while (instr != 0xffffffff) {
         unsigned char opc = opcode(instr);
-        std::cerr << fmt::format("instr[{:d}] = {:#x}\n", (size_t)(p - riscv), instr);
-        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(wasm - wasm_copy));
+        std::cerr << fmt::format("instr[{:d}] = {:#x}\n", (size_t)(riscv - riscv_copy), instr);
+        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
         instr >>= 4;
         unsigned type = instr & 0b111;
 
-        unsigned cnt = backward_count[(size_t)(p - riscv)];
-        std::cerr << fmt::format("backward[{:d}] = {:d}\n", (size_t)(p - riscv), cnt);
+        unsigned cnt = forward_count[(size_t)(riscv - riscv_copy)];
+        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(p - wasm));
+        std::cerr << fmt::format("forward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
         while (cnt-- > 0) {
-            *wasm = 0x03;
-            wasm += 1;
-            *wasm = 0x40;
-            wasm += 1;
+            *p = 0x0b;
+            p += 1;
         }
 
-        cnt = forward_count[(size_t)(p - riscv)];
-        std::cerr << fmt::format("wasm offset = {:d}\n", (size_t)(wasm - wasm_copy));
-        std::cerr << fmt::format("forward[{:d}] = {:d}\n", (size_t)(p - riscv), cnt);
+        cnt = backward_count[(size_t)(riscv - riscv_copy)];
+        std::cerr << fmt::format("backward[{:d}] = {:d}\n", (size_t)(riscv - riscv_copy), cnt);
         while (cnt-- > 0) {
-            *wasm = 0x0b;
-            wasm += 1;
+            *p = 0x03;
+            p += 1;
+            *p = 0x40;
+            p += 1;
         }
         
         switch (type) {
             case 0b001: // itype
-            wasm += translateIType(wasm, (unsigned long long*)p, opc);
+            p += translateIType(p, (unsigned long long*)riscv, opc);
             break;
             case 0b011: // rtype
-            wasm += translateRType(wasm, (unsigned long long*)p, opc);
+            p += translateRType(p, (unsigned long long*)riscv, opc);
             break;
             case 0b110: // branch
-            wasm += translateBranch(wasm, (unsigned*)p, opc);
+            p += translateBranch(p, (unsigned*)riscv, opc);
             break;
         }
 
-        p += 1;
-        instr = *p;
+        riscv += 1;
+        instr = *riscv;
     }
-    *wasm = 0x20; // get_local
-    wasm += 1;
-    *wasm = 0x00; // get_local 0
-    wasm += 1;
-    *wasm = 0x0f; // return
-    wasm += 1;
-    *wasm = 0x0b; // end
-    wasm += 1;
-    return (size_t)(p - riscv);
+    *p = 0x20; // get_local
+    p += 1;
+    *p = 0x00; // get_local 0
+    p += 1;
+    *p = 0x0f; // return
+    p += 1;
+    *p = 0x0b; // end
+    p += 1;
+    return (size_t)(p - wasm);
 }
 
 
@@ -624,6 +628,10 @@ void test_all() {
     std::cout << "test all\n";
     std::vector<std::string> tests {
         "BackwardBranch",
+        "BranchToFirstInstruction",
+        "BranchToLastInstruction",
+        "ForwardBranch",
+        "MultipleBranches",
     };
     for (auto name : tests) {
         memset(forward_count, 0, sizeof(forward_count));
@@ -650,11 +658,11 @@ void test_all() {
         fread(ans_buf, ans_size, 1, fans);
 
         unsigned char *out_buf = (unsigned char*)calloc(1, ans_size + 64);
-        RISCVtoWASM(bin_buf, out_buf);
+        size_t sz = RISCVtoWASM(bin_buf, out_buf);
 
         bool match = true;
-        for (size_t i = 0; i < ans_size; i++) {
-            if (out_buf[i] != ans_buf[i]) {
+        for (size_t i = 0; i < sz; i++) {
+            if (out_buf[i] != ans_buf[i + 32]) {
                 match = false;
             }
         }
