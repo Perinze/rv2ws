@@ -205,6 +205,159 @@ translateRType:
 
 
 translateBranch:
+# size_t translateBranch(unsigned char *wasm, const unsigned *riscv, unsigned char opcode) {
+    # a4 = opcode(a2)
+    mv      a4, a2
+
+    # unsigned instr = *riscv;
+    # riscv end
+    lw      a2, 0(a1)
+
+    # s7 is wasm
+    mv      s7, a0
+
+    # instr >>= 7;
+    srli    a2, a2, 7
+
+    # int imm = instr & 0b11111; // [4:1|11]
+    andi    a3, a2, 0x1f
+
+    # instr >>= 8;
+    srli    a2, a2, 8
+
+    # unsigned tmp = imm & 1;
+    andi    t0, a3, 1
+
+    # if (tmp == 1) {
+    beq     t0, zero, branch_set_imm_11_done
+
+    #     imm |= 0b100000000000;
+    ori     a3, a3, 0x800
+
+branch_set_imm_11_done:
+    # imm &= 0xfffffffe; // [11] [4:0]
+    andi    a3, a3, 0xfffffffe
+
+    # unsigned src = instr & 0b11111;
+    andi    a0, a2, 0x1f
+
+    # instr >>= 5;
+    srli    a2, a2, 5
+
+    # unsigned tar = instr & 0b11111;
+    andi    a5, a2, 0x1f
+
+    # instr >>= 5;
+    srli    a2, a2, 5
+
+    # tmp = instr & 0b111111;
+    andi    t0, a2, 0x3f
+
+    # tmp <<= 5;
+    slli    t0, t0, 5
+
+    # imm |= tmp; // [11:0]
+    or      a3, a3, t0
+
+    # instr >>= 6;
+    srli    a2, a2, 6
+
+    # tmp = instr & 1;
+    andi    t0, a2, 1
+
+    # bool flag = 1; // forward
+    li      s8, 1
+
+    # if (tmp == 1) {
+    beq     t0, zero, extend_imm_done
+
+    #     imm |= 0xfffff000;
+    ori     a3, a3, 0xfffff000
+
+    #     flag = 0; // backward
+    li      s8, 0
+
+extend_imm_done:
+
+    # unsigned char *p = wasm;
+    mv      a1, s7
+
+    # if (flag == 1) { // forward
+    beq     t1, zero, branch_forward_end
+
+    #     *p = 0x02; // block
+    li      t0, 0x02
+    sb      t0, 0(a1)
+
+    #     p += 1;
+    addi    a1, a1, 1
+
+    #     *p = 0x40; // block
+    li      t0, 0x40
+    sb      t0, 0(a1)
+
+    #     p += 1;
+    addi    a1, a1, 1
+
+branch_forward_end:
+
+    # old_p = p
+    mv      a6, a1
+
+    # a0 = src, a1 = p
+    # src end
+    jal     convertReg
+
+    # p = old_p + a0
+    # old_p a6 end
+    add     a1, a6, a0
+
+    # old_p = p
+    mv      a6, a1
+
+    # a0 = tar, a1 = p
+    # tar end
+    mv      a0, a5
+    jal     convertReg
+
+    # p = old_p + a0
+    # old_p a6 end
+    add     a1, a6, a0
+
+    # *p = opcode; // store byte
+    sb      a4, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # *p = 0x0d; // store halfword
+    li      t0, 0x0d
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # *p = 0x00; // store halfword
+    sb      zero, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # if (flag == 0) { // backward
+    bne     s8, zero, branch_backward_end
+
+    #     *p = 0x0b;
+    li      t0, 0x0b
+    sb      t0, 0(a1)
+
+    #     p += 1;
+    addi    a1, a1, 1
+
+branch_backward_end:
+
+    # return (unsigned)(p - wasm);
+    sub     a0, a1, s7
+    jalr    zero, ra, 0
 
 
 
