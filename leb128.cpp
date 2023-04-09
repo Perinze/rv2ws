@@ -422,6 +422,14 @@ size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
         p += 1;
         instr = *p;
     }
+    *wasm = 0x20; // get_local
+    wasm += 1;
+    *wasm = 0x00; // get_local 0
+    wasm += 1;
+    *wasm = 0x0f; // return
+    wasm += 1;
+    *wasm = 0x0b; // end
+    wasm += 1;
     return (size_t)(p - riscv);
 }
 
