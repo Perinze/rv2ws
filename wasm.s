@@ -15,6 +15,8 @@ translateRType:
 
 translateBranch:
 
+
+
 encodeleb128:
     # x &= 0xfff;
     li      t1, 0xfff
@@ -93,7 +95,46 @@ set_size_to_2_end:
     jalr    zero, ra, 0
 
 
+
 generateTargetTable:
+    # unsigned *p = riscv;
+    mv      a1, a0
+
+    # unsigned instr = *p;
+    lw      a5, 0(a0)
+
+    # while (instr != 0xffffffff) {
+    #     unsigned opcode = instr & 0b1111111;
+    #     if (opcode != 0b1100011) {
+    #         p += 1;
+    #         instr = *p;
+    #         continue;
+    #     }
+    #     instr >>= 7;
+    #     int imm = instr & 0b11111; // [4:1|11]
+    #     unsigned tmp = imm & 1;
+    #     if (tmp == 1) {
+    #         imm |= 0b100000000000;
+    #     }
+    #     imm &= 0xfffffffe; // [11] [4:0]
+    #     instr >>= 18;
+    #     tmp = instr & 0b111111;
+    #     tmp <<= 5;
+    #     imm |= tmp; // [11:0]
+    #     instr >>= 6;
+    #     tmp = instr & 1;
+    #     unsigned char flag = 1; // forward
+    #     if (tmp == 1) {
+    #         imm |= 0xfffff000;
+    #         flag = 0; // backward
+    #     }
+    #     imm += (unsigned)p;
+    #     incrTargetCount(riscv, (unsigned*)imm, flag);
+    #     p += 1; // in asm p += 4 since instruction is 4 bytes
+    #     instr = *p;
+    # }
+
+
 
 readTargetCount:
     # unsigned char *table = backward_count;
@@ -116,6 +157,8 @@ flag_is_zero:
     add     a5, a5, a1
     lbu     a0, 0(a5)
     jalr    zero, ra, 0
+
+
 
 incrTargetCount:
     # unsigned char *table = backward_count;
