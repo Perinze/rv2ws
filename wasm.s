@@ -7,6 +7,136 @@ forwardCount:
 forwardCount:
     .zero 2000
 
+opcode:
+# unsigned char opcode(unsigned instr) {
+    # unsigned tmp = instr & 0x707f;
+    andi	t0, a0, 0x707f
+    
+    # unsigned flag = instr & 0x40000000;
+    andi    t1, a0, 0x40000000
+
+    # switch (tmp) {
+    li      t2, 0x7013
+    beq     t2, t0, opcode_and
+    li      t2, 0x7033
+    beq     t2, t0, opcode_and
+    li      t2, 0x6013
+    beq     t2, t0, opcode_or
+    li      t2, 0x6033
+    beq     t2, t0, opcode_or
+    li      t2, 0x0013
+    beq     t2, t0, opcode_addi
+    li      t2, 0x0033
+    beq     t2, t0, opcode_add_or_sub
+    li      t2, 0x5013
+    beq     t2, t0, opcode_srai_or_srli
+    li      t2, 0x1013
+    beq     t2, t0, opcode_slli
+    li      t2, 0x5033
+    beq     t2, t0, opcode_srl
+    li      t2, 0x1033
+    beq     t2, t0, opcode_sll
+    li      t2, 0x0063
+    beq     t2, t0, opcode_beq
+    li      t2, 0x5063
+    beq     t2, t0, opcode_bge
+    j       opcode_default
+
+opcode_and:
+    #     case 0x7013: // andi
+    #     case 0x7033: // and
+    #     return 0x71; // i32.and
+    li      a0, 0x71
+    jalr    zero, ra, 0
+
+opcode_or:
+    #     case 0x6013: // ori
+    #     case 0x6033: // or
+    #     return 0x72; // i32.or
+    li      a0, 0x71
+    jalr    zero, ra, 0
+
+opcode_addi:
+    #     case 0x0013: // addi
+    #     return 0x6a; // i32.add
+    li      a0, 0x6a
+    jalr    zero, ra, 0
+
+opcode_add_or_sub:
+    #     case 0x0033:
+    #     if (flag == 0) { // add
+    bne     t1, zero, opcode_sub
+
+    #         return 0x6a; // i32.add
+    li      a0, 0x6a
+    jalr    zero, ra, 0
+
+    #     } else { // sub
+opcode_sub:
+
+    #         return 0x6b; // i32.sub
+    li      a0, 0x6b
+    jalr    zero, ra, 0
+
+opcode_srai_or_srli:
+    #     case 0x5013:
+    #     if (flag == 1) { // srai
+    beq     t1, zero, opcode_srli
+
+    #         return 0x75; // i32.shr_s
+    li      a0, 0x75
+    jalr    zero, ra, 0
+
+    #     } else { // srli
+opcode_srli:
+
+    #         return 0x76; // i32.shr_u
+    li      a0, 0x76
+    jalr    zero, ra, 0
+
+opcode_slli:
+    #     case 0x1013: // slli
+    #     return 0x74; // i32.shl
+    li      a0, 0x74
+    jalr    zero, ra, 0
+
+opcode_srl:
+    #     case 0x5033: // srl
+    #     return 0x76; // i32.shr_u
+    li      a0, 0x76
+    jalr    zero, ra, 0
+
+opcode_sll:
+    #     case 0x1033:
+    #     return 0x74; // i32.shl
+    li      a0, 0x74
+    jalr    zero, ra, 0
+
+opcode_beq:
+    #     case 0x0063:
+    #     return 0x46; // i32.eq
+    li      a0, 0x46
+    jalr    zero, ra, 0
+
+opcode_bge:
+    #     case 0x5063:
+    #     return 0x4e; // i32.ge_s
+    li      a0, 0x4e
+    jalr    zero, ra, 0
+
+opcode_default:
+    #     default:
+    #     return 0xff; // invalid
+    li      a0, 0xff
+    jalr    zero, ra, 0
+
+
+
+
+
+
+
+
 RISCVtoWASM:
 # size_t RISCVtoWASM(unsigned *riscv, unsigned char* wasm) {
     # riscv = a0, wasm = a1
