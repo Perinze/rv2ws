@@ -17,6 +17,9 @@ RISCVtoWASM:
 
 
 translateIType:
+    # a4 = opcode(a2)
+    mv      a4, a2
+
     # unsigned instr = *riscv;
     # riscv end
     lw      a2, 0(a1)
@@ -119,7 +122,87 @@ handle_i32_shr_s_end:
 
 
 
+# size_t translateRType(unsigned char *wasm, const unsigned long long *riscv, unsigned char opcode) {
 translateRType:
+    # a4 = opcode(a2)
+    mv      a4, a2
+
+    # unsigned instr = *riscv;
+    # riscv end
+    lw      a2, 0(a1)
+
+    # s7 is wasm
+    mv      s7, a0
+
+    # instr >>= 7;
+    srli    a2, a2, 7
+
+    # unsigned dst = instr & 0b11111;
+    andi    a3, a2, 0x1f
+
+    # instr >>= 8;
+    srli    a2, 8
+
+    # unsigned src = instr & 0b11111;
+    andi    a0, a2, 0x1f
+
+    # instr >>= 5;
+    srli    a2, a2, 5
+
+    # unsigned tar = instr & 0b11111;
+    andi    a5, a2, 0x1f
+    
+    # unsigned char *p = wasm;
+
+    # a0 = src, a1 = wasm
+    # src end
+    mv      a1, s7
+    jal     convertReg
+
+    # p = wasm + a0
+    add     a6, s7, a0
+    mv      a1, a6
+
+    # a0 = tar, a1 = p
+    # tar end
+    mv      a0, a5
+    jal     convertReg
+
+    # p = old_p + a0
+    # old_p a6 end
+    add     a1, a6, a0
+
+    # *p = opcode; // store byte
+    sb      a4, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # *p = 0x21; // store byte
+    li      t0, 0x21
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # unsigned tmp = regMap[dst];
+    lb      t0, regMap(a3)
+
+    # *p = tmp; // store byte
+    sb      t0, 0(a1)
+
+    # p += 1;
+    addi    a1, a1, 1
+
+    # return (unsigned)(p - wasm);
+    sub     a0, a1, s7
+    jalr    zero, ra, 0
+
+
+
+
+
+
 
 translateBranch:
 
