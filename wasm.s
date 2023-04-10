@@ -3,10 +3,10 @@
 
     .align 2
 forwardCount:
-    .zero 2000
+    .space 2000
 
-forwardCount:
-    .zero 2000
+backwardCount:
+    .space 2000
 
 regMap:
     .byte 0x00, 0x3f, 0x3f, 0x3f, 0x3f, 0x16, 0x17, 0x18, 
@@ -16,9 +16,11 @@ regMap:
 
     .text
 opcode:
-    andi	t0, a0, 0x707f
+    li          t3, 0x707f
+    and 	t0, a0, t3
     
-    andi    t1, a0, 0x40000000
+    li          t3, 0x40000000
+    and         t1, a0, t3
 
     li      t2, 0x7013
     beq     t2, t0, opcode_and
@@ -132,13 +134,13 @@ main_loop:
     jal     opcode
     mv      a2, a0
     
-    srli    a3, 4
+    srli    a3, a3, 4
 
-    and     a5, a3, 0x7
+    andi    a5, a3, 0x7
 
     sub     t0, s4, s6
     srli    t0, t0, 2
-    lb      t0, forward_count(t0)
+    lb      t0, %lo(forwardCount)(t0)
 
     j       loop_forward_check
 loop_forward_begin:
@@ -146,8 +148,7 @@ loop_forward_begin:
     sb      t1, 0(a4)
 
     addi    a4, a4, 1
-
-    subi	t0, t0, 1
+    addi	t0, t0, -1
     
 loop_forward_check:
     bgt		t0, zero, loop_forward_begin
@@ -156,7 +157,7 @@ loop_forward_end:
 
     sub     t0, s4, s6
     srli    t0, t0, 2
-    lb      t0, backward_count(t0)
+    lb      t0, %lo(backwardCount)(t0)
 
     j		loop_backward_check
 loop_backward_begin:
@@ -165,7 +166,7 @@ loop_backward_begin:
 
     addi    a0, a4, 2
 
-    subi    t0, t0, 1
+    addi    t0, t0, -1
 
 loop_backward_check:
     bgt     t0, zero, loop_backward_begin
@@ -233,13 +234,14 @@ translateIType:
 
     andi    a3, a2, 0x1f
 
-    srli    a2, 8
+    srli    a2, a2, 8
 
     andi    a0, a2, 0x1f
 
     srli    a2, a2, 5
 
-    andi    a2, a2, 0xfff
+    li      t0, 0xfff
+    and     a2, a2, t0
 
     li      t0, 0x75
     bne     a4, t0, handle_i32_shr_s_end
@@ -265,7 +267,7 @@ handle_i32_shr_s_end:
 
     sh      a0, 0(s0)
 
-    addi    a1, s0, a1
+    add     a1, s0, a1
 
     sb      a4, 0(a1)
 
@@ -276,7 +278,7 @@ handle_i32_shr_s_end:
 
     addi    a1, a1, 1
 
-    lb      t0, regMap(a3)
+    lb      t0, %lo(regMap)(a3)
 
     sb      t0, 0(a1)
 
@@ -302,7 +304,7 @@ translateRType:
 
     andi    a3, a2, 0x1f
 
-    srli    a2, 8
+    srli    a2, a2, 8
 
     andi    a0, a2, 0x1f
 
@@ -331,7 +333,7 @@ translateRType:
 
     addi    a1, a1, 1
 
-    lb      t0, regMap(a3)
+    lb      t0, %lo(regMap)(a3)
 
     sb      t0, 0(a1)
 
@@ -363,7 +365,8 @@ translateBranch:
 
     beq     t0, zero, branch_set_imm_11_done
 
-    ori     a3, a3, 0x800
+    li      t0, 0x800
+    or      a3, a3, t0
 
 branch_set_imm_11_done:
     andi    a3, a3, 0xfffffffe
@@ -390,7 +393,8 @@ branch_set_imm_11_done:
 
     beq     t0, zero, extend_imm_done
 
-    ori     a3, a3, 0xfffff000
+    li      t0, 0xfffff000
+    or      a3, a3, t0
 
     li      s8, 0
 
@@ -457,7 +461,7 @@ branch_backward_end:
 
 
 
-encodeleb128:
+encodeLEB128:
     li      t1, 0xfff
 
 
@@ -530,7 +534,9 @@ generate_table_loop:
     andi    a7, a1, 1
 
     beq     a7, zero, set_imm_11_done
-    ori     a1, a1, 0x800
+    
+    li      t0, 0x800
+    or      a1, a1, t0
 set_imm_11_done:
 
     andi    a1, a1, 0xfffffffe
@@ -551,7 +557,8 @@ set_imm_11_done:
 
     beq     a7, zero, generate_table_set_flag
 
-    ori     a1, a1, 0xfffff000
+    li      t0, 0xfffff000
+    or      a1, a1, t0
 
     li      a2, 0
 
@@ -562,7 +569,7 @@ generate_table_set_flag:
     jal		incrTargetCount
     
 incr_instr_ptr:
-    add     a3, a3, 4
+    addi    a3, a3, 4
 
     lw		a5, 0(a3)
 
@@ -579,11 +586,11 @@ generate_table_return:
 
 
 readTargetCount:
-    la      a5, backward_count
+    la      a5, backwardCount
 
-    beq     a2, zero, flag_is_zero
-    la      a5, forward_count
-flag_is_zero:
+    beq     a2, zero, flag_is_zero_read
+    la      a5, forwardCount
+flag_is_zero_read:
 
     sub     a1, a1, a0
 
@@ -601,11 +608,11 @@ flag_is_zero:
 
 
 incrTargetCount:
-    la      a5, backward_count
+    la      a5, backwardCount
 
-    beq     a2, zero, flag_is_zero
-    la      a5, forward_count
-flag_is_zero:
+    beq     a2, zero, flag_is_zero_incr
+    la      a5, forwardCount
+flag_is_zero_incr:
 
     sub     a1, a1, a0
 
@@ -644,7 +651,7 @@ src_is_reg:
 
     addi    a1, a1, 1
 
-    lb		t0, regMap(a0)
+    lb		t0, %lo(regMap)(a0)
 
     sb      t0, 0(a1)
 
