@@ -3,10 +3,10 @@
 
     .align 2
 forwardCount:
-    .zero 2000
+    .space 2000
 
 forwardCount:
-    .zero 2000
+    .space 2000
 
 regMap:
     .byte 0x00, 0x3f, 0x3f, 0x3f, 0x3f, 0x16, 0x17, 0x18, 
@@ -811,8 +811,9 @@ generate_table_set_flag:
     #     imm += (unsigned)p;
     add     a1, a1, a3
     
+    mv      a0, a3
     #     incrTargetCount(riscv, (unsigned*)imm, flag);
-    #     a0 = riscv, a1 = imm, a2 = flag
+    #     a0 = p, a1 = imm, a2 = flag
     jal		incrTargetCount
     
 incr_instr_ptr:

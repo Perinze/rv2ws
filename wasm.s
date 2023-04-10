@@ -586,18 +586,21 @@ generate_table_return:
 
 
 readTargetCount:
-    la      a5, backwardCount
-
     beq     a2, zero, flag_is_zero_read
-    la      a5, forwardCount
-flag_is_zero_read:
-
     sub     a1, a1, a0
-
     srli    a1, a1, 2
-
-    add     a5, a5, a1
-    lbu     a0, 0(a5)
+    lui     a0, %hi(forwardCount)
+    addi    a0, a0, %lo(forwardCount)
+    add     a1, a1, a0
+    lbu     a0, 0(a1)
+    jalr    zero, ra, 0
+flag_is_zero_read:
+    sub     a1, a1, a0
+    srli    a1, a1, 2
+    lui     a0, %hi(backwardCount)
+    addi    a0, a0, %lo(backwardCount)
+    add     a1, a1, a0
+    lbu     a0, 0(a1)
     jalr    zero, ra, 0
 
 
@@ -608,25 +611,27 @@ flag_is_zero_read:
 
 
 incrTargetCount:
-    la      a5, backwardCount
 
     beq     a2, zero, flag_is_zero_incr
-    la      a5, forwardCount
-flag_is_zero_incr:
-
     sub     a1, a1, a0
-
     srli    a1, a1, 2
-
-    add     a5, a5, a1
-    lbu     a4, 0(a5)
-
+    lui     a0, %hi(forwardCount)
+    addi    a0, a0, %lo(forwardCount)
+    add     a1, a1, a0
+    lbu     a4, 0(a1)
     addi    a4, a4, 1
-
-    sb      a4, 0(a5)
-
+    sb      a4, 0(a1)
     jalr    zero, ra, 0
-
+flag_is_zero_incr:
+    sub     a1, a1, a0
+    srli    a1, a1, 2
+    lui     a0, %hi(backwardCount)
+    addi    a0, a0, %lo(backwardCount)
+    add     a1, a1, a0
+    lbu     a4, 0(a1)
+    addi    a4, a4, 1
+    sb      a4, 0(a1)
+    jalr    zero, ra, 0
 
 
 

@@ -68,10 +68,12 @@ format:
     .asciz "\n"
 outfile:        #all generated output files are named 'main.wasm'
     .asciz "main.wasm"
+#binFileName:
+#    .asciz "test/BackwardBranch.bin"
 
     .text
 main:
-
+    #la      a1, binFileName
     lw      a0, 0(a1)	        # Put the filename pointer into a0
     li      a1, 0		        # Read Only
     li      a7, 1024		    # Open File
